@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MC 服务器监控面板 · My World Monitor Tool</title>
+<meta name="description" content="双端 MC 服务器监控面板：Windows 桌面端 + Android 移动端。本地 Python 状态服务 + 纯前端面板，实时查看在线人数、版本、延迟与服务器日志。">
+<style>
+  :root{
+    --bg:#0a0c16;
+    --bg2:#101327;
+    --card:#141830;
+    --card2:#1a1f3d;
+    --line:#272d4d;
+    --txt:#eaecf8;
+    --sub:#98a0c2;
+    --dim:#6b739a;
+    --purple:#8b6cff;
+    --pink:#e45fd0;
+    --cyan:#3fdcd8;
+    --green:#59d98a;
+    --amber:#ffc46b;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--txt);
+    font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Segoe UI",system-ui,sans-serif;
+    line-height:1.7;overflow-x:hidden;
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{width:min(1140px,92vw);margin:0 auto}
+
+  /* ---------- 背景光晕 ---------- */
+  .glow{position:fixed;border-radius:50%;filter:blur(120px);opacity:.28;pointer-events:none;z-index:0}
+  .g1{width:520px;height:520px;background:#6b46c1;top:-180px;left:-120px;animation:float1 18s ease-in-out infinite}
+  .g2{width:460px;height:460px;background:#d53f8c;top:340px;right:-180px;animation:float2 22s ease-in-out infinite}
+  .g3{width:380px;height:380px;background:#2b7de9;top:1100px;left:20%;animation:float1 26s ease-in-out infinite reverse}
+  @keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,50px)}}
+  @keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(-50px,70px)}}
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+    background-size:44px 44px;
+    mask-image:linear-gradient(to bottom,#000 0%,transparent 85%);
+  }
+  main,header,footer{position:relative;z-index:1}
+
+  /* ---------- 顶栏 ---------- */
+  header{border-bottom:1px solid var(--line);background:rgba(10,12,22,.72);backdrop-filter:blur(14px);position:sticky;top:0;z-index:20}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:66px;gap:18px}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:16px;letter-spacing:.3px}
+  .brand svg{width:30px;height:30px;flex-shrink:0}
+  .brand small{display:block;font-size:10px;color:var(--dim);font-weight:400;letter-spacing:1.6px;text-transform:uppercase;line-height:1.2}
+  .nav-links{display:flex;gap:22px;align-items:center;font-size:13px;color:var(--sub);flex-wrap:wrap}
+  .nav-links a:hover{color:var(--cyan)}
+  .nav .repo{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);padding:7px 13px;border-radius:9px;font-size:12px;color:var(--sub);transition:.2s}
+  .nav .repo:hover{border-color:var(--purple);color:var(--txt);background:var(--card)}
+  .nav .repo svg{width:15px;height:15px}
+
+  /* ---------- Hero ---------- */
+  .hero{padding:88px 0 70px;text-align:center}
+  .badges{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-bottom:26px}
+  .badge{font-size:11.5px;letter-spacing:.6px;padding:5px 13px;border-radius:99px;border:1px solid var(--line);background:rgba(20,24,48,.7);color:var(--sub)}
+  .badge b{color:var(--cyan);font-weight:600}
+  .badge.p b{color:var(--pink)}
+  .badge.g b{color:var(--green)}
+  h1{font-size:clamp(32px,5.4vw,58px);line-height:1.18;font-weight:800;letter-spacing:-1px}
+  h1 .grad{background:linear-gradient(100deg,var(--purple),var(--pink) 48%,var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p.lead{max-width:720px;margin:22px auto 0;color:var(--sub);font-size:16px}
+  .hero .cta{display:flex;gap:13px;justify-content:center;flex-wrap:wrap;margin-top:34px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:13px 24px;border-radius:12px;font-size:14px;font-weight:600;transition:.22s;border:1px solid transparent;cursor:pointer}
+  .btn svg{width:17px;height:17px}
+  .btn-primary{background:linear-gradient(100deg,var(--purple),#a45cff);color:#fff;box-shadow:0 8px 30px rgba(139,108,255,.3)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 38px rgba(139,108,255,.46)}
+  .btn-ghost{background:var(--card);border-color:var(--line);color:var(--txt)}
+  .btn-ghost:hover{border-color:var(--cyan);transform:translateY(-2px)}
+  .stat-row{display:flex;gap:34px;justify-content:center;flex-wrap:wrap;margin-top:46px;color:var(--dim);font-size:12.5px}
+  .stat-row b{display:block;font-size:19px;color:var(--txt);font-weight:700;font-family:var(--mono)}
+
+  /* ---------- 通用区块 ---------- */
+  section{padding:64px 0;border-top:1px solid rgba(39,45,77,.6)}
+  .sec-head{margin-bottom:36px}
+  .kicker{font-size:11px;letter-spacing:2.4px;text-transform:uppercase;color:var(--purple);font-weight:700;margin-bottom:10px}
+  h2{font-size:clamp(24px,3.2vw,34px);font-weight:750;letter-spacing:-.5px}
+  .sec-head p{color:var(--sub);margin-top:10px;font-size:14.5px;max-width:760px}
+
+  /* ---------- 下载卡片 ---------- */
+  .dl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+  .dl-card{background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:18px;padding:28px;position:relative;overflow:hidden;transition:.25s}
+  .dl-card:hover{border-color:rgba(139,108,255,.6);transform:translateY(-4px)}
+  .dl-card::after{content:"";position:absolute;top:-70px;right:-70px;width:190px;height:190px;border-radius:50%;filter:blur(60px);opacity:.22}
+  .dl-card.win::after{background:var(--purple)}
+  .dl-card.and::after{background:var(--cyan)}
+  .dl-top{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  .ico{width:50px;height:50px;border-radius:13px;display:grid;place-items:center;flex-shrink:0}
+  .ico svg{width:27px;height:27px}
+  .ico.w{background:rgba(139,108,255,.16);color:#b9a6ff}
+  .ico.a{background:rgba(63,220,216,.14);color:var(--cyan)}
+  .dl-top h3{font-size:19px;font-weight:700}
+  .dl-top span{font-size:12px;color:var(--dim);font-family:var(--mono)}
+  .dl-meta{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:20px}
+  .chip{font-size:11.5px;padding:4px 10px;border-radius:7px;background:rgba(255,255,255,.045);border:1px solid var(--line);color:var(--sub);font-family:var(--mono)}
+  .dl-card .btn{width:100%}
+  .dl-sub{margin-top:12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--dim)}
+  .dl-sub a{color:var(--cyan)}
+  .dl-sub a:hover{text-decoration:underline}
+  .dl-note{margin-top:18px;font-size:12px;color:var(--dim);border-left:2px solid var(--line);padding-left:12px}
+
+  /* ---------- 架构图 ---------- */
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;justify-content:center;margin:8px 0 30px}
+  .fnode{flex:1 1 190px;min-width:170px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 16px;text-align:center}
+  .fnode .fi{font-size:22px;margin-bottom:8px}
+  .fnode b{display:block;font-size:14px;margin-bottom:6px}
+  .fnode span{font-size:11.5px;color:var(--dim);line-height:1.6;font-family:var(--mono);word-break:break-all}
+  .fnode.hl{border-color:rgba(139,108,255,.55);background:linear-gradient(160deg,rgba(139,108,255,.14),var(--card))}
+  .farrow{display:grid;place-items:center;color:var(--purple);font-size:20px;padding:0 8px;flex:0 0 34px;font-family:var(--mono)}
+  @media(max-width:900px){.farrow{transform:rotate(90deg);padding:8px 0;flex:1 1 100%}}
+
+  .grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:15px}
+  .mini{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:19px}
+  .mini .num{font-family:var(--mono);font-size:11px;color:var(--purple);letter-spacing:1px;margin-bottom:9px}
+  .mini h4{font-size:14.5px;margin-bottom:8px}
+  .mini p{font-size:12.8px;color:var(--sub);line-height:1.75}
+  code{font-family:var(--mono);font-size:.92em;background:rgba(139,108,255,.11);color:#c3b2ff;padding:2px 6px;border-radius:5px}
+
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;margin-top:16px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--line)}
+  th{background:rgba(139,108,255,.09);color:var(--txt);font-weight:600;font-size:12px;letter-spacing:.5px}
+  tr:last-child td{border-bottom:none}
+  td{color:var(--sub)}
+  td:first-child{font-family:var(--mono);color:#c3b2ff;white-space:nowrap}
+  tbody tr:hover td{background:rgba(255,255,255,.022)}
+
+  /* ---------- 步骤 / 分支 ---------- */
+  .two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:24px}
+  .box h3{font-size:16px;margin-bottom:16px;display:flex;align-items:center;gap:9px}
+  .box h3 .dot{width:9px;height:9px;border-radius:50%;background:var(--purple)}
+  .box h3 .dot.c{background:var(--cyan)}
+  ol.steps{list-style:none;counter-reset:s}
+  ol.steps li{counter-increment:s;position:relative;padding-left:34px;margin-bottom:14px;font-size:13.2px;color:var(--sub)}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:2px;width:22px;height:22px;border-radius:7px;background:rgba(139,108,255,.15);color:#b9a6ff;font-family:var(--mono);font-size:11px;display:grid;place-items:center;font-weight:700}
+  .box.a ol.steps li::before{background:rgba(63,220,216,.12);color:var(--cyan)}
+  .branch-list{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+  .br{display:flex;align-items:center;gap:13px;padding:13px 15px;border:1px solid var(--line);border-radius:11px;background:var(--bg2);font-size:13px}
+  .br b{font-family:var(--mono);color:var(--cyan);min-width:96px}
+  .br span{color:var(--sub);flex:1}
+  .br.main b{color:var(--pink)}
+  .codebox{position:relative;background:#080a13;border:1px solid var(--line);border-radius:12px;padding:18px 18px 18px 20px;margin-top:16px;overflow-x:auto}
+  .codebox pre{font-family:var(--mono);font-size:12.5px;color:#c8cef0;line-height:1.9;white-space:pre}
+  .codebox .cm{color:#5f6a92}
+  .copybtn{position:absolute;top:10px;right:10px;background:var(--card2);border:1px solid var(--line);color:var(--sub);font-size:11px;padding:5px 10px;border-radius:7px;cursor:pointer;font-family:inherit}
+  .copybtn:hover{color:var(--txt);border-color:var(--purple)}
+
+  footer{border-top:1px solid var(--line);padding:36px 0 44px;color:var(--dim);font-size:12.5px}
+  .foot{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;align-items:center}
+  .foot a{color:var(--sub)}
+  .foot a:hover{color:var(--cyan)}
+  .reveal{opacity:0;transform:translateY(18px);animation:up .7s ease forwards}
+  @keyframes up{to{opacity:1;transform:none}}
+  .d1{animation-delay:.05s}.d2{animation-delay:.14s}.d3{animation-delay:.23s}
+  @media(max-width:640px){
+    .hero{padding:60px 0 50px}.nav-links{display:none}section{padding:48px 0}
+    .stat-row{gap:20px}.dl-card{padding:22px}
+  }
+</style>
+</head>
+<body>
+<div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="7" fill="url(#bg1)"/><path d="M9 11.5h14M9 16h14M9 20.5h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="24.5" cy="20.5" r="2.5" fill="#3fdcd8"/><defs><linearGradient id="bg1" x1="0" y1="0" x2="32" y2="32"><stop stop-color="#8b6cff"/><stop offset="1" stop-color="#d53f8c"/></linearGradient></defs></svg>
+      <div>MC 服务器监控面板<small>My World Monitor Tool</small></div>
+    </div>
+    <nav class="nav-links">
+      <a href="#download">下载</a>
+      <a href="#how">工作原理</a>
+      <a href="#api">接口</a>
+      <a href="#start">快速开始</a>
+      <a href="#branches">分支</a>
+      <a class="repo" href="https://github.com/180lisilence/my-world-monitor-tool" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a12 12 0 0 0-3.79 23.4c.6.11.82-.26.82-.58v-2.2c-3.34.73-4.04-1.42-4.04-1.42-.55-1.4-1.34-1.77-1.34-1.77-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.96 0-1.32.47-2.4 1.24-3.24-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.24a11.5 11.5 0 0 1 6 0c2.29-1.56 3.3-1.24 3.3-1.24.66 1.66.24 2.88.12 3.18.77.84 1.24 1.92 1.24 3.24 0 4.63-2.81 5.65-5.49 5.95.43.37.81 1.1.81 2.22v3.29c0 .32.21.7.82.58A12 12 0 0 0 12 .5Z"/></svg>
+        180lisilence / my-world-monitor-tool
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- HERO -->
+  <div class="wrap hero">
+    <div class="badges reveal d1">
+      <span class="badge"><b>双端</b> Windows + Android</span>
+      <span class="badge p"><b>实时</b> 在线人数 / 延迟 / 日志</span>
+      <span class="badge g"><b>本地优先</b> 数据不出内网</span>
+      <span class="badge"><b>零依赖前端</b> 单 HTML 文件</span>
+    </div>
+    <h1 class="reveal d1">把你的 MC 服务器<br><span class="grad">装进口袋里</span></h1>
+    <p class="lead reveal d2">一套面板，两个端。Windows 上双击即用，手机上装 APK 随时看。本地 Python 服务直连服务器查询状态与日志，浏览器 / WebView 负责渲染 —— 没有云端账号，没有第三方后台。</p>
+    <div class="cta reveal d3">
+      <a class="btn btn-primary" href="#download">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        立即下载
+      </a>
+      <a class="btn btn-ghost" href="#how">先看它怎么工作 →</a>
+    </div>
+    <div class="stat-row reveal d3">
+      <div><b>2</b>客户端分支</div>
+      <div><b>8765</b>本地服务端口</div>
+      <div><b>5s</b>状态缓存窗口</div>
+      <div><b>1</b>套前端页面复用</div>
+    </div>
+  </div>
+
+  <!-- 下载 -->
+  <section id="download">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Download</div>
+        <h2>选你的设备，点一下就装</h2>
+        <p>两个分支各自存放对应端的完整源码与已编译成品。下面的按钮直连仓库里的二进制文件，浏览器会直接开始下载。</p>
+      </div>
+      <div class="dl-grid">
+        <div class="dl-card win">
+          <div class="dl-top">
+            <div class="ico w"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.6 10.5 4.5v7H3V5.6Zm0 8.9h7.5v7L3 20.4v-5.9ZM11.5 4.3 21 3v8.5h-9.5V4.3Zm0 9.2H21V21l-9.5-1.3v-6.2Z"/></svg></div>
+            <div><h3>Windows 桌面端</h3><span>MC-Server-Panel-Windows.exe</span></div>
+          </div>
+          <div class="dl-meta">
+            <span class="chip">exe 启动器</span><span class="chip">4 KB</span><span class="chip">含 Python 服务源码</span><span class="chip">免安装</span>
+          </div>
+          <a class="btn btn-primary" href="https://raw.githubusercontent.com/180lisilence/my-world-monitor-tool/windows/MC-Server-Panel-Windows.exe" download>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 Windows 版
+          </a>
+          <div class="dl-sub">
+            <span>或下载中文原名 <code>MC服务器监控面板.exe</code></span>
+            <a href="https://github.com/180lisilence/my-world-monitor-tool/tree/windows" target="_blank" rel="noopener">查看 windows 分支 →</a>
+          </div>
+          <div class="dl-note">运行前需本机已装 Python 3 与 <code>mcstatus</code> 库；启动器只负责用默认浏览器打开同目录的 <code>monitor.html</code>。</div>
+        </div>
+
+        <div class="dl-card and">
+          <div class="dl-top">
+            <div class="ico a"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.5 19.9 5.5a.5.5 0 0 0-.7-.7l-4.1 2.4a9 9 0 0 0-6.2 0L4.8 4.8a.5.5 0 0 0-.7.7l2.3 4A7.6 7.6 0 0 0 4 14.5h16a7.6 7.6 0 0 0-2.4-5ZM8 12.2a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8Zm8 0a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8ZM6 16.5v4a1 1 0 0 0 2 0v-4m2 0v4a1 1 0 0 0 2 0v-4m2 0v4a1 1 0 0 0 2 0v-4m2 0v4a1 1 0 0 0 2 0v-4"/></svg></div>
+            <div><h3>Android 移动端</h3><span>MC-Server-Panel-beta.apk</span></div>
+          </div>
+          <div class="dl-meta">
+            <span class="chip">beta</span><span class="chip">≈ 5.2 MB</span><span class="chip">minSdk 24</span><span class="chip">WebView 壳</span>
+          </div>
+          <a class="btn btn-primary" href="https://raw.githubusercontent.com/180lisilence/my-world-monitor-tool/android/MC-Server-Panel-beta.apk" download>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 Android APK
+          </a>
+          <div class="dl-sub">
+            <span>包名 <code>com.msll.mcpanel</code></span>
+            <a href="https://github.com/180lisilence/my-world-monitor-tool/tree/android" target="_blank" rel="noopener">查看 android 分支 →</a>
+          </div>
+          <div class="dl-note">安装后需在面板「设置」里把 API 地址填成电脑的局域网地址，例如 <code>http://192.168.1.100:8765/status</code>。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 原理 -->
+  <section id="how">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">How it works</div>
+        <h2>工作原理：一个服务，两个壳</h2>
+        <p>核心思路是把「采集」和「展示」彻底分开。采集端是一段跑在开服电脑上的 Python 脚本，展示端是同一个 HTML 文件 —— 在 Windows 上由浏览器打开，在 Android 上由 WebView 加载。两端改的只是这个 HTML 里填写的 API 地址。</p>
+      </div>
+
+      <div class="flow">
+        <div class="fnode"><div class="fi">⛏️</div><b>MC 服务器</b><span>Java 版<br>localhost:43906<br>logs/latest.log</span></div>
+        <div class="farrow">→</div>
+        <div class="fnode hl"><div class="fi">🐍</div><b>本地状态服务</b><span>mc_server.py<br>HTTPServer 0.0.0.0:8765<br>mcstatus 查询 + 日志翻译</span></div>
+        <div class="farrow">→</div>
+        <div class="fnode"><div class="fi">📡</div><b>HTTP / JSON</b><span>GET /status<br>GET /logs<br>CORS: *</span></div>
+        <div class="farrow">→</div>
+        <div class="fnode"><div class="fi">🖥️ 📱</div><b>面板前端</b><span>浏览器 (Windows)<br>WebView (Android)<br>同一份 index.html</span></div>
+      </div>
+
+      <div class="grid4">
+        <div class="mini"><div class="num">01 / 采集</div><h4>状态查询</h4><p>用 <code>mcstatus.JavaServer.lookup("localhost:43906")</code> 发一次 Server List Ping，拿到 <code>players.online / max</code>、<code>version.name</code>、<code>latency</code>。结果缓存 5 秒，避免高频 ping 拖累服务器。</p></div>
+        <div class="mini"><div class="num">02 / 采集</div><h4>日志读取与翻译</h4><p>读取 <code>logs/latest.log</code> 的最后 80 行，按内置英译中词典逐行替换（joined the game → 加入了游戏、Can't keep up → 服务器卡顿…），长词优先匹配，避免短词覆盖长词。</p></div>
+        <div class="mini"><div class="num">03 / 服务</div><h4>零框架 HTTP 接口</h4><p>仅用标准库 <code>http.server</code> 起一个 <code>HTTPServer</code>，监听 <code>0.0.0.0:8765</code>。三个路由返回 JSON，统一带上 <code>Access-Control-Allow-Origin: *</code>，所以手机浏览器 / WebView 跨域也能读。</p></div>
+        <div class="mini"><div class="num">04 / 展示</div><h4>一份前端，两处运行</h4><p>面板是纯 HTML/CSS/JS，定时 fetch 状态与日志并渲染。本地接口 2 秒内不通时自动回退到公共查询 <code>api.mcstatus.io</code>；API 地址存在 <code>localStorage</code>，Android 端改成局域网 IP 即可远程看。</p></div>
+      </div>
+
+      <div class="two-col" style="margin-top:20px">
+        <div class="box">
+          <h3><span class="dot"></span>Windows 端做了什么</h3>
+          <p style="font-size:13.2px;color:var(--sub)">C# WinForms 启动器（<code>MonitorPanel/Program.cs</code>）编译成 4 KB 的 exe，启动后只做一件事：<code>Process.Start</code> 用默认浏览器打开同目录的 <code>monitor.html</code>。<code>启动面板.vbs</code> 则负责后台静默拉起 Python 服务、等 2 秒、再打开面板 —— 不弹黑窗口。</p>
+        </div>
+        <div class="box a">
+          <h3><span class="dot c"></span>Android 端做了什么</h3>
+          <p style="font-size:13.2px;color:var(--sub)">工程 <code>com.msll.mcpanel</code>（compileSdk 34 / minSdk 24）里只有一个 <code>MainActivity</code>：创建全屏 <code>WebView</code>，开启 JavaScript、DOM Storage、文件访问与混合内容，然后 <code>loadUrl("file:///android_asset/index.html")</code>。Manifest 声明 INTERNET 权限并允许明文流量，面板才能访问 <code>http://</code> 的局域网服务。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 接口 -->
+  <section id="api">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">API & Config</div>
+        <h2>接口与可调参数</h2>
+        <p>下面全部来自仓库里的真实代码，改完重启 <code>mc_server.py</code> 即生效。</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>路由</th><th>返回</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>GET /status</td><td>application/json</td><td>在线状态、在线/最大人数、版本名、延迟(ms)；离线时返回 <code>online:false</code> 与错误信息。5 秒缓存。</td></tr>
+            <tr><td>GET /logs</td><td>application/json</td><td><code>logs[]</code> 最后 80 行翻译后的日志 + <code>total</code> 总行数；读不到文件时返回 <code>error</code>。</td></tr>
+            <tr><td>GET /</td><td>text/html</td><td>服务自检页，显示服务端口与正在查询的 MC 地址。</td></tr>
+            <tr><td>其它路径</td><td>404</td><td>无响应体。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>常量</th><th>默认值</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td>MC_HOST / MC_PORT</td><td>localhost / 43906</td><td>被监控的 MC 服务器地址，改成实际开服端口。</td></tr>
+            <tr><td>SERVICE_PORT</td><td>8765</td><td>对外提供 HTTP 接口的端口；防火墙需放行。</td></tr>
+            <tr><td>LOG_FILE</td><td>E:\MSL\MSL\Server1\logs\latest.log</td><td>MC 服务端日志路径，按自己的开服目录改。</td></tr>
+            <tr><td>CACHE_TTL</td><td>5</td><td>状态缓存秒数。</td></tr>
+            <tr><td>mc_api_url</td><td>http://localhost:8765/status</td><td>面板设置项，存 localStorage；手机端填电脑局域网 IP。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 快速开始 -->
+  <section id="start">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Quick start</div>
+        <h2>三步跑起来</h2>
+      </div>
+      <div class="two-col">
+        <div class="box">
+          <h3><span class="dot"></span>Windows</h3>
+          <ol class="steps">
+            <li>装依赖：<code>pip install mcstatus</code></li>
+            <li>按上表改好 <code>mc_server.py</code> 里的端口与日志路径，运行 <code>python mc_server.py</code>，看到「MC状态服务已启动」。</li>
+            <li>双击 <code>MC服务器监控面板.exe</code>（或直接打开 <code>monitor.html</code>）；也可用 <code>启动面板.vbs</code> 一键静默启动。</li>
+          </ol>
+        </div>
+        <div class="box a">
+          <h3><span class="dot c"></span>Android</h3>
+          <ol class="steps">
+            <li>保证电脑上的服务监听 <code>0.0.0.0:8765</code>，且手机与电脑在同一局域网。</li>
+            <li>安装 APK，打开后点面板「设置」，把 API 地址改成 <code>http://电脑IP:8765/status</code>。</li>
+            <li>保存后即可看到在线人数、延迟与实时日志；本地接口不通时会自动回退到公共查询。</li>
+          </ol>
+        </div>
+      </div>
+      <div class="codebox">
+        <button class="copybtn" onclick="cp(this)">复制</button>
+        <pre><span class="cm"># 开服电脑上，一次启动本地状态服务</span>
+pip install mcstatus
+python mc_server.py
+
+<span class="cm"># 自检：另开一个终端</span>
+curl http://localhost:8765/status
+curl http://localhost:8765/logs
+
+<span class="cm"># 手机端填的地址（把 192.168.1.100 换成电脑实际 IP）</span>
+http://192.168.1.100:8765/status</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 分支 -->
+  <section id="branches">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Branches</div>
+        <h2>仓库结构：三个分支，各司其职</h2>
+        <p>双端互不干扰，所以拆成两条独立分支；<code>main</code> 只放这个介绍页，可直接用 GitHub Pages 打开。</p>
+      </div>
+      <div class="branch-list">
+        <div class="br main"><b>main</b><span>项目介绍页（本页 index.html）+ README，作为 GitHub Pages 站点根目录</span></div>
+        <div class="br"><b>windows</b><span>Windows 端：exe 启动器、C# 源码、mc_server.py、monitor.html、面板配套资源、VBS 启动脚本</span></div>
+        <div class="br"><b>android</b><span>Android 端：Android Studio 工程 MCServerPanel/（含 assets 面板页）、已编译 APK、APK 结构检查产物</span></div>
+      </div>
+      <div class="dl-note" style="margin-top:20px;border-left-color:var(--purple)">页面上的下载按钮指向 <code>windows</code> / <code>android</code> 分支内的 ASCII 命名成品副本；各分支里同时保留了原始中文文件名。IDE 缓存、Gradle 构建产物与第三方仓库副本未纳入版本管理。</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>MC 服务器监控面板 · 双端实时监控 · 本地优先，数据不出内网</div>
+    <div><a href="https://github.com/180lisilence/my-world-monitor-tool" target="_blank" rel="noopener">GitHub 仓库</a> · <a href="https://github.com/180lisilence/my-world-monitor-tool/tree/windows" target="_blank" rel="noopener">windows</a> · <a href="https://github.com/180lisilence/my-world-monitor-tool/tree/android" target="_blank" rel="noopener">android</a></div>
+  </div>
+</footer>
+
+<script>
+function cp(btn){
+  var t=btn.parentElement.querySelector('pre').innerText;
+  navigator.clipboard.writeText(t).then(function(){
+    btn.textContent='已复制 ✓';
+    setTimeout(function(){btn.textContent='复制'},1600);
+  });
+}
+</script>
+</body>
+</html>
