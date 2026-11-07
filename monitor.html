@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MC服务器监控</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    font-family: 'KaiTi', 'STKaiti', 'SimSun', 'Microsoft YaHei', serif;
+    background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 50%, #d53f8c 100%);
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
+    color: #1a1a2e;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 24px;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  .panel {
+    width: 420px;
+    flex-shrink: 0;
+    animation: panelSlideIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes panelSlideIn {
+    from { opacity: 0; transform: translateY(40px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* 顶部标题栏 */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding: 0 6px;
+  }
+  .top-bar .title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  }
+  .top-bar .title .dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 12px #22c55e;
+    animation: dotPulse 2s infinite;
+  }
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 12px #22c55e; }
+    50% { box-shadow: 0 0 24px #22c55e; }
+  }
+  .top-bar .right-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .top-bar .version {
+    font-size: 12px;
+    color: #fff;
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(10px);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+  }
+  .fingerprint-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: all 0.2s;
+    backdrop-filter: blur(10px);
+  }
+  .fingerprint-btn:hover {
+    background: rgba(255,255,255,0.35);
+    transform: scale(1.05);
+  }
+
+  /* 磨砂玻璃卡片 */
+  .card {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 18px;
+    padding: 24px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    animation: cardSlideUp 0.5s ease-out backwards;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+  }
+  .card.local-card::before {
+    background: linear-gradient(90deg, #f093fb, #f5576c);
+  }
+  .card:nth-child(2) { animation-delay: 0.1s; }
+  @keyframes cardSlideUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .card.glow-online {
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(34, 197, 94, 0.2);
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a1a2e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .icon {
+    font-size: 16px;
+  }
+
+  /* 状态标签 */
+  .status-tag {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .status-tag.online {
+    background: #dcfce7;
+    color: #16a34a;
+  }
+  .status-tag.offline {
+    background: #fee2e2;
+    color: #dc2626;
+  }
+  .status-tag.local {
+    background: #e0e7ff;
+    color: #4f46e5;
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .status-tag.online .status-dot {
+    animation: blink 1.5s ease-in-out infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 8px currentColor; }
+    50% { opacity: 0.5; transform: scale(1.5); box-shadow: 0 0 16px currentColor; }
+  }
+
+  /* 地址行 */
+  .addr-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f3f4f6;
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    border: 1px solid #e5e7eb;
+  }
+  .addr-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a2e;
+    font-family: 'Courier New', monospace;
+  }
+  .copy-btn {
+    background: #1a1a2e;
+    border: none;
+    color: #fff;
+    padding: 7px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { background: #333; transform: translateY(-1px); }
+
+  /* 大数字 */
+  .big-num-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .big-num {
+    text-align: left;
+  }
+  .big-num .num {
+    font-size: 72px;
+    font-weight: 800;
+    line-height: 1;
+    color: #1a1a2e;
+    font-family: 'Courier New', monospace;
+    transition: transform 0.2s;
+  }
+  .big-num .num.bump {
+    animation: numBump 0.3s ease-out;
+  }
+  @keyframes numBump {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+  .big-num .sub {
+    font-size: 14px;
+    color: #666;
+    margin-top: 8px;
+    font-weight: 500;
+  }
+
+  /* 迷你环形图 */
+  .ring {
+    width: 76px;
+    height: 76px;
+    position: relative;
+  }
+  .ring svg {
+    transform: rotate(-90deg);
+  }
+  .ring .ring-bg {
+    fill: none;
+    stroke: #e5e7eb;
+    stroke-width: 7;
+  }
+  .ring .ring-fill {
+    fill: none;
+    stroke: #22c55e;
+    stroke-width: 7;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s ease-out, stroke 0.3s;
+    filter: drop-shadow(0 0 4px rgba(34, 197, 94, 0.4));
+  }
+  .ring .ring-fill.offline {
+    stroke: #dc2626;
+    filter: drop-shadow(0 0 4px rgba(220, 38, 38, 0.4));
+  }
+  .ring .ring-text {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 11px;
+    font-weight: 700;
+    color: #333;
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  /* 进度条 */
+  .progress-bar {
+    height: 10px;
+    background: #f3f4f6;
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 16px 0 20px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #22c55e, #06b6d4);
+    border-radius: 5px;
+    width: 0%;
+    transition: width 0.8s ease-out;
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+  }
+
+  /* 三列统计 */
+  .stats-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+  .stat-box {
+    background: #f9fafb;
+    border-radius: 12px;
+    padding: 16px 8px;
+    text-align: center;
+    transition: all 0.25s;
+    cursor: default;
+    border: 1px solid #f3f4f6;
+  }
+  .stat-box:hover {
+    transform: translateY(-4px);
+    background: #f3f4f6;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  }
+  .stat-box .val {
+    font-size: 22px;
+    font-weight: 800;
+    color: #1a1a2e;
+    font-family: 'Courier New', monospace;
+  }
+  .stat-box .val.cyan { color: #0891b2; }
+  .stat-box .val.orange { color: #ea580c; }
+  .stat-box .val.muted { color: #9ca3af; }
+  .stat-box .key {
+    font-size: 11px;
+    color: #666;
+    margin-top: 6px;
+    font-weight: 500;
+  }
+
+  /* 分隔线 */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 24px 6px;
+  }
+  .divider .divider-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-shadow: 0 1px 5px rgba(0,0,0,0.15);
+  }
+  .divider .divider-label::before {
+    content: '';
+    width: 3px;
+    height: 16px;
+    background: #fff;
+    border-radius: 2px;
+  }
+  .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.3);
+  }
+
+  /* 底部 */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 6px;
+    margin-top: 8px;
+  }
+  .bottom-bar .time {
+    font-size: 12px;
+    color: rgba(255,255,255,0.8);
+  }
+  .refresh-btn {
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.3);
+    padding: 10px 22px;
+    border-radius: 25px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .refresh-btn:hover {
+    background: rgba(255,255,255,0.3);
+    transform: translateY(-2px);
+  }
+  .refresh-btn:active { transform: translateY(0); }
+  .refresh-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .refresh-btn .icon {
+    display: inline-block;
+    transition: transform 0.5s;
+  }
+  .refresh-btn.loading .icon {
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* 设置视图 */
+  .view { display: none; }
+  .view.active { display: block; animation: viewSlideIn 0.4s ease-out; }
+  @keyframes viewSlideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .setting-row {
+    background: #f9fafb;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid #f3f4f6;
+  }
+  .setting-label {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .setting-input {
+    width: 100%;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #1a1a2e;
+    font-family: inherit;
+    outline: none;
+  }
+  .setting-input:focus {
+    border-color: #6366f1;
+  }
+  .back-btn {
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    margin-bottom: 16px;
+    transition: all 0.2s;
+  }
+  .back-btn:hover { background: rgba(255,255,255,0.3); }
+
+  @media (max-width: 980px) {
+    .log-panel {
+      width: 100%;
+      height: 55vh;
+      position: static;
+    }
+  }
+  @media (max-width: 400px) {
+    .stats-row { gap: 6px; }
+    .stat-box { padding: 14px 4px; }
+    .stat-box .val { font-size: 18px; }
+    .big-num .num { font-size: 52px; }
+    .top-bar .title { font-size: 18px; }
+  }
+
+  /* 日志窗口 */
+  .log-panel {
+    width: 480px;
+    height: 90vh;
+    flex-shrink: 1;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(20px);
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: cardSlideUp 0.5s ease-out 0.2s backwards;
+    position: sticky;
+    top: 24px;
+  }
+  .log-head {
+    padding: 14px 18px;
+    background: rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 13px;
+    font-weight: 700;
+    color: #e0e0e0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .log-head .live {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #22c55e;
+    font-weight: 600;
+  }
+  .log-head .live::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    animation: blink 1.5s infinite;
+  }
+  .log-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #d4d4d4;
+  }
+  .log-body::-webkit-scrollbar { width: 6px; }
+  .log-body::-webkit-scrollbar-track { background: transparent; }
+  .log-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+  .log-line {
+    white-space: pre-wrap;
+    word-break: break-all;
+    padding: 1px 0;
+  }
+  .log-line.info { color: #9cdcfe; }
+  .log-line.warn { color: #ce9178; }
+  .log-line.error { color: #f48771; }
+  .log-line.player { color: #6a9955; }
+  .log-body::-webkit-scrollbar { width: 6px; }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <div class="top-bar">
+    <div class="title">
+      <div class="dot"></div>
+      MC服务器监控
+    </div>
+    <div class="right-group">
+      <div class="version">beta</div>
+      <button class="fingerprint-btn" onclick="showView('settings')" title="设置">👆</button>
+    </div>
+  </div>
+
+  <!-- 监控视图 -->
+  <div class="view active" id="view-monitor">
+
+  <!-- 外部状态卡片 -->
+  <div class="card" id="extCard">
+    <div class="card-head">
+      <div class="card-title"><span class="icon">🌐</span> 外部状态</div>
+      <div class="status-tag offline" id="extTag">
+        <div class="status-dot"></div>
+        <span id="extStatusText">检测中</span>
+      </div>
+    </div>
+
+    <div class="addr-row">
+      <span class="addr-text" id="addrText">frp-bus.com:51535</span>
+      <button class="copy-btn" onclick="copyAddr(this)">复制</button>
+    </div>
+
+    <div class="big-num-wrap">
+      <div class="big-num">
+        <div class="num" id="playerCount">--</div>
+        <div class="sub" id="playerMaxLabel">暂无数据</div>
+      </div>
+      <div class="ring">
+        <svg width="76" height="76">
+          <circle class="ring-bg" cx="38" cy="38" r="31"></circle>
+          <circle class="ring-fill offline" cx="38" cy="38" r="31" id="ringFill"
+                  stroke-dasharray="194.8" stroke-dashoffset="194.8"></circle>
+        </svg>
+        <div class="ring-text" id="ringText">--</div>
+      </div>
+    </div>
+
+    <div class="progress-bar">
+      <div class="progress-fill" id="playerBar"></div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="val cyan muted" id="pingVal">--</div>
+        <div class="key">延迟</div>
+      </div>
+      <div class="stat-box">
+        <div class="val muted" id="verVal">--</div>
+        <div class="key">版本</div>
+      </div>
+      <div class="stat-box">
+        <div class="val orange muted" id="maxVal">--</div>
+        <div class="key">最大人数</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"><div class="divider-label">本地服务器</div></div>
+
+  <!-- 本地状态卡片 -->
+  <div class="card local-card" id="localCard">
+    <div class="card-head">
+      <div class="card-title"><span class="icon">💻</span> 本地状态</div>
+      <div class="status-tag local" id="localTag">
+        <div class="status-dot"></div>
+        <span id="localStatusText">检测中</span>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="val muted" id="localPlayers">--</div>
+        <div class="key">在线人数</div>
+      </div>
+      <div class="stat-box">
+        <div class="val cyan muted" id="localMem">--</div>
+        <div class="key">内存</div>
+      </div>
+      <div class="stat-box">
+        <div class="val orange muted" id="localTps">--</div>
+        <div class="key">TPS</div>
+      </div>
+    </div>
+
+    <div class="progress-bar" style="margin-top:20px;">
+      <div class="progress-fill" id="memBar" style="background: linear-gradient(90deg, #f97316, #ef4444); box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);"></div>
+    </div>
+    <div style="text-align:center; font-size:11px; color:#999; margin-top:8px;">内存占用</div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="time" id="updateTime">等待中...</div>
+    <button class="refresh-btn" id="refreshBtn" onclick="fetchAll()">
+      <span class="icon">⟳</span>
+      <span>刷新</span>
+    </button>
+  </div>
+  </div>
+
+  <!-- 设置视图 -->
+  <div class="view" id="view-settings">
+    <button class="back-btn" onclick="showView('monitor')">← 返回</button>
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title"><span class="icon">⚙️</span> 设置</div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-label">服务器地址</div>
+        <input class="setting-input" id="settingHost" value="frp-bus.com">
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-label">端口</div>
+        <input class="setting-input" id="settingPort" value="51535">
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-label">数据API地址（留空=纯手动模式）</div>
+        <input class="setting-input" id="settingApiUrl" placeholder="例：http://192.168.1.100:8765/status" value="http://localhost:8765/status">
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-label">自动刷新间隔（秒）</div>
+        <input class="setting-input" id="settingInterval" value="5">
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-label">手动模式（API连不上时用）</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px;">
+          <input class="setting-input" id="settingManualOn" placeholder="在线人数" value="1">
+          <input class="setting-input" id="settingManualMax" placeholder="最大人数" value="20">
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-label">日志设置</div>
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px; font-size:13px;">
+          <label style="display:flex; align-items:center; gap:8px; color:#333;">
+            <input type="checkbox" id="settingLogShow" checked> 显示日志窗口
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; color:#333;">
+            <input type="checkbox" id="settingLogAutoScroll" checked> 自动滚动到最新
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; color:#333;">
+            <input type="checkbox" id="settingLogTranslate" checked> 自动翻译英文
+          </label>
+        </div>
+      </div>
+
+      <button class="refresh-btn" style="width:100%; justify-content:center; margin-top:8px; background:#1a1a2e; color:#fff;" onclick="saveSettings()">
+        保存设置
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 日志窗口 -->
+<div class="log-panel" id="logPanel">
+  <div class="log-head">
+    <span>📜 服务器日志</span>
+    <span class="live">实时</span>
+  </div>
+  <div class="log-body" id="logBody">
+    <div class="log-line">等待日志数据...</div>
+  </div>
+</div>
+
+<script>
+  const HOST = 'frp-bus.com';
+  const PORT = 51535;
+  const REMOTE_API = `https://api.mcstatus.io/v2/status/java/${HOST}:${PORT}`;
+  const REFRESH_MS = 5000;
+  const RING_CIRC = 2 * Math.PI * 31;
+
+  function getLocalApi() {
+    return localStorage.getItem('mc_api_url') || 'http://localhost:8765/status';
+  }
+
+  let currentOnline = false;
+  let currentOn = 0;
+  let currentMax = 0;
+
+  function now() {
+    return new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  }
+
+  function copyAddr(btn) {
+    navigator.clipboard.writeText(`${HOST}:${PORT}`);
+    btn.textContent = '已复制';
+    setTimeout(() => btn.textContent = '复制', 1000);
+  }
+
+  function setRing(ratio, on, max, isOnline) {
+    const offset = RING_CIRC * (1 - ratio);
+    const ringFill = document.getElementById('ringFill');
+    ringFill.style.strokeDashoffset = offset;
+    document.getElementById('ringText').innerHTML = `${on}/${max}`;
+    if (!isOnline) {
+      ringFill.classList.add('offline');
+      return;
+    }
+    ringFill.classList.remove('offline');
+    if (ratio < 0.5) {
+      ringFill.style.stroke = '#22c55e';
+      ringFill.style.filter = 'drop-shadow(0 0 4px rgba(34, 197, 94, 0.4))';
+    } else if (ratio < 0.8) {
+      ringFill.style.stroke = '#eab308';
+      ringFill.style.filter = 'drop-shadow(0 0 4px rgba(234, 179, 8, 0.4))';
+    } else {
+      ringFill.style.stroke = '#ef4444';
+      ringFill.style.filter = 'drop-shadow(0 0 4px rgba(239, 68, 68, 0.4))';
+    }
+  }
+
+  function bumpNum(el) {
+    el.classList.remove('bump');
+    void el.offsetWidth;
+    el.classList.add('bump');
+  }
+
+  async function fetchExt() {
+    const tag = document.getElementById('extTag');
+    const statusText = document.getElementById('extStatusText');
+    const countEl = document.getElementById('playerCount');
+    const maxLabel = document.getElementById('playerMaxLabel');
+    const pingEl = document.getElementById('pingVal');
+    const verEl = document.getElementById('verVal');
+    const maxNumEl = document.getElementById('maxVal');
+    const bar = document.getElementById('playerBar');
+    const extCard = document.getElementById('extCard');
+
+    function showOffline(reason) {
+      currentOnline = false;
+      currentOn = 0;
+      currentMax = 0;
+      tag.className = 'status-tag offline';
+      statusText.textContent = reason || '离线';
+      extCard.classList.remove('glow-online');
+      countEl.textContent = '0';
+      maxLabel.textContent = '当前无人在线';
+      pingEl.textContent = '--';
+      pingEl.classList.add('muted');
+      verEl.textContent = '--';
+      verEl.classList.add('muted');
+      maxNumEl.textContent = '--';
+      maxNumEl.classList.add('muted');
+      bar.style.width = '0%';
+      setRing(0, 0, 0, false);
+    }
+
+    function showData(data, sourceLabel) {
+      currentOnline = true;
+      currentOn = data.players?.online ?? 0;
+      currentMax = data.players?.max ?? 0;
+      tag.className = 'status-tag online';
+      statusText.textContent = sourceLabel || '在线';
+      extCard.classList.add('glow-online');
+      const on = currentOn;
+      const max = currentMax;
+      countEl.textContent = on;
+      bumpNum(countEl);
+      maxLabel.textContent = `/ 最大 ${max}`;
+      pingEl.textContent = (data.ping ?? '--') + 'ms';
+      pingEl.classList.remove('muted');
+      verEl.textContent = data.version?.name_clean?.substring(0, 6) ?? '--';
+      verEl.classList.remove('muted');
+      maxNumEl.textContent = max;
+      maxNumEl.classList.remove('muted');
+      const ratio = max > 0 ? on / max : 0;
+      bar.style.width = (ratio * 100) + '%';
+      setRing(ratio, on, max, true);
+    }
+
+    // 1. 优先试用户配置的API地址
+    try {
+      const localApi = getLocalApi();
+      if (localApi) {
+        const res = await fetch(localApi, { signal: AbortSignal.timeout(2000) });
+        const data = await res.json();
+        if (data.online) {
+          showData(data, '在线');
+          return;
+        }
+      }
+    } catch (e) {}
+
+    // 2. 降级到外部API
+    try {
+      const res = await fetch(REMOTE_API, { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+      if (data.online) {
+        showData(data, '在线');
+        return;
+      }
+    } catch (e) {}
+
+    // 3. 手动模式兜底
+    const manualOn = localStorage.getItem('mc_manual_on');
+    const manualMax = localStorage.getItem('mc_manual_max');
+    if (manualOn !== null && manualMax !== null) {
+      showData({
+        players: { online: parseInt(manualOn), max: parseInt(manualMax) },
+        ping: 0,
+        version: { name_clean: '手动' }
+      }, '手动');
+      return;
+    }
+
+    // 都不行，显示离线
+    showOffline('离线');
+  }
+
+  function fetchLocal(isOnline, on, max) {
+    const tag = document.getElementById('localTag');
+    const statusText = document.getElementById('localStatusText');
+    const playersEl = document.getElementById('localPlayers');
+    const memEl = document.getElementById('localMem');
+    const tpsEl = document.getElementById('localTps');
+    const memBar = document.getElementById('memBar');
+
+    if (isOnline) {
+      tag.className = 'status-tag local';
+      statusText.textContent = '运行中';
+      playersEl.textContent = on;
+      playersEl.classList.remove('muted');
+      memEl.textContent = '--';
+      tpsEl.textContent = '--';
+      memBar.style.width = '0%';
+    } else {
+      tag.className = 'status-tag offline';
+      statusText.textContent = '已停止';
+      playersEl.textContent = '--';
+      playersEl.classList.add('muted');
+      memEl.textContent = '--';
+      tpsEl.textContent = '--';
+      memBar.style.width = '0%';
+    }
+  }
+
+  async function fetchAll() {
+    const btn = document.getElementById('refreshBtn');
+    btn.disabled = true;
+    btn.classList.add('loading');
+    await fetchExt();
+    fetchLocal(currentOnline, currentOn, currentMax);
+    document.getElementById('updateTime').textContent = `更新于 ${now()}`;
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+
+  fetchAll();
+  setInterval(fetchAll, REFRESH_MS);
+
+  async function fetchLogs() {
+    try {
+      const apiUrl = getLocalApi();
+      if (!apiUrl) return;
+      const logsUrl = apiUrl.replace(/\/status$/, '/logs');
+      const res = await fetch(logsUrl, { signal: AbortSignal.timeout(2000) });
+      const data = await res.json();
+      if (data.logs) {
+        const body = document.getElementById('logBody');
+        const autoScroll = localStorage.getItem('mc_log_autoscroll') !== 'false';
+        const wasAtBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 30;
+        body.innerHTML = data.logs.map(line => {
+          // 提取时间戳
+          let timeMatch = line.match(/(\d{2}:\d{2}:\d{2})\./);
+          let time = timeMatch ? timeMatch[1] : '';
+          let cls = 'info';
+          let display = '';
+
+          // 跳过完全空行
+          if (!line.trim()) return '';
+
+          // 玩家加入
+          let joinMatch = line.match(/(\w+) joined the game/);
+          if (joinMatch) {
+            display = `✅ ${joinMatch[1]} 加入了游戏`;
+            cls = 'player';
+          }
+          // 玩家离开
+          else if (line.match(/(\w+) left the game/)) {
+            let m = line.match(/(\w+) left the game/);
+            display = `👋 ${m[1]} 离开了游戏`;
+            cls = 'player';
+          }
+          // 连接丢失
+          else if (line.match(/(\w+) lost connection/)) {
+            let m = line.match(/(\w+) lost connection: (.*)/);
+            display = `⚠️ ${m[1]} 连接断开（${m[2] ? m[2].substring(0,30) : '未知原因'}）`;
+            cls = 'warn';
+          }
+          // 服务器启动完成
+          else if (line.includes('Done (')) {
+            let m = line.match(/Done \(([\d.]+)s\)/);
+            display = `🚀 服务器启动完成，耗时 ${m ? m[1] : '?'} 秒`;
+            cls = 'player';
+          }
+          // 服务器停止
+          else if (line.includes('Stopping server')) {
+            display = `🛑 服务器正在关闭`;
+            cls = 'warn';
+          }
+          // 保存世界
+          else if (line.includes('Saving players')) {
+            display = `💾 正在保存世界数据`;
+            cls = 'info';
+          }
+          // 警告
+          else if (line.includes('/WARN]')) {
+            let m = line.match(/\/WARN\].*?: (.*)/);
+            if (m) {
+              let msg = m[1];
+              if (msg.includes('memory')) display = `⚠️ 内存不足警告`;
+              else if (msg.includes('Can\'t keep up')) display = `⚠️ 服务器卡顿，tick耗时过长`;
+              else display = `⚠️ 警告: ${msg.substring(0, 50)}`;
+              cls = 'warn';
+            } else return '';
+          }
+          // 错误
+          else if (line.includes('/ERROR]') || line.includes('Exception') || line.includes('Caused by')) {
+            let m = line.match(/\/ERROR\].*?: (.*)/);
+            display = `❌ 服务器出错: ${m ? m[1].substring(0, 50) : '发生异常'}`;
+            cls = 'error';
+          }
+          // 在线人数查询
+          else if (line.match(/There are (\d+) of a max of (\d+) players/)) {
+            let m = line.match(/There are (\d+) of a max of (\d+) players/);
+            display = `👥 当前 ${m[1]} 人在线 / 最大 ${m[2]} 人`;
+            cls = 'info';
+          }
+          // 生成世界
+          else if (line.includes('Preparing spawn area')) {
+            display = `🌍 正在生成出生点区域`;
+            cls = 'info';
+          }
+          // 插件/模组消息
+          else if (line.includes('/INFO]') && line.includes('AllTheLeaks')) {
+            // 内存泄漏检测模组的输出，过滤掉树形结构
+            if (line.includes('Memory Leaks')) {
+              display = `🧠 内存泄漏检测: 已运行`;
+              cls = 'info';
+            } else if (line.includes('Player:')) {
+              return ''; // 跳过树形子项
+            } else if (line.includes('ChunkAccess:')) {
+              return ''; // 跳过树形子项
+            } else {
+              return ''; // 其他模组调试行跳过
+            }
+          }
+          // 其他普通INFO行，提取消息内容显示
+          else if (line.includes('/INFO]')) {
+            let m = line.match(/\/INFO\].*?: (.*)/);
+            if (m && m[1].length > 3 && !m[1].includes('LevelChunk') && !m[1].includes('Thread')) {
+              display = m[1].substring(0, 70);
+            } else {
+              return '';
+            }
+          }
+          // 其他全部跳过
+          else {
+            return '';
+          }
+
+          if (!display) return '';
+          return `<div class="log-line ${cls}">[${time}] ${display}</div>`;
+        }).filter(l => l).join('');
+
+        if (body.innerHTML === '') body.innerHTML = '<div class="log-line" style="color:#888">等待日志事件...</div>';
+        if (autoScroll && wasAtBottom) body.scrollTop = body.scrollHeight;
+      }
+    } catch (e) {}
+  }
+  fetchLogs();
+  setInterval(fetchLogs, 2000);
+
+  function showView(name) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + name).classList.add('active');
+    // 设置页或关闭日志时隐藏日志窗口
+    const logPanel = document.getElementById('logPanel');
+    const logEnabled = localStorage.getItem('mc_log_show') !== 'false';
+    if (name === 'settings' || !logEnabled) {
+      logPanel.style.display = 'none';
+    } else {
+      logPanel.style.display = '';
+    }
+  }
+
+  function saveSettings() {
+    const host = document.getElementById('settingHost').value.trim();
+    const port = document.getElementById('settingPort').value.trim();
+    const interval = parseInt(document.getElementById('settingInterval').value) || 5;
+    const apiUrl = document.getElementById('settingApiUrl').value.trim();
+    const manualOn = document.getElementById('settingManualOn').value.trim();
+    const manualMax = document.getElementById('settingManualMax').value.trim();
+    const logShow = document.getElementById('settingLogShow').checked;
+    const logAutoScroll = document.getElementById('settingLogAutoScroll').checked;
+    const logTranslate = document.getElementById('settingLogTranslate').checked;
+    if (host && port) {
+      localStorage.setItem('mc_host', host);
+      localStorage.setItem('mc_port', port);
+      localStorage.setItem('mc_interval', interval);
+      localStorage.setItem('mc_api_url', apiUrl);
+      localStorage.setItem('mc_log_show', logShow);
+      localStorage.setItem('mc_log_autoscroll', logAutoScroll);
+      localStorage.setItem('mc_log_translate', logTranslate);
+      if (manualOn && manualMax) {
+        localStorage.setItem('mc_manual_on', manualOn);
+        localStorage.setItem('mc_manual_max', manualMax);
+      }
+      alert('设置已保存');
+      showView('monitor');
+      fetchAll();
+    }
+  }
+</script>
+
+</body>
+</html>
